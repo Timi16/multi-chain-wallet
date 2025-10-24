@@ -1,5 +1,5 @@
 {
-  "name": "@demeta/multi-vm-wallet",
+  "name": "@demetacode/multi-vm-wallet",
   "version": "1.0.0",
   "devDependencies": {
     "@types/bn.js": "^5.2.0",
