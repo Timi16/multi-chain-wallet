@@ -1,0 +1,7 @@
+// Discover tokens for users both for evm and svm
+// Discover wallet address for users based on private staticAccountKeys
+// wallet activities from the blockchain per wallet address
+// transaction insight both evm and svm / transaction preview / transaction quote / simulate transactions and show result
+// 
+// provide good images for the blockchains
+// connect wallet
