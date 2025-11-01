@@ -108,7 +108,9 @@ export class SVMChainWallet extends ChainWallet<PublicKey, Keypair, Connection> 
     }
 
 
-    async swap(fromToken: TokenInfo, toToken: PublicKey, amount: number, slippage: number = 50): Promise<TransactionResult> {
+    // Updated SVMChainWallet swap methods with better defaults and debonk compatibility
+
+    async swap(fromToken: TokenInfo, toToken: PublicKey, amount: number, slippage?: number): Promise<TransactionResult> {
         try {
             if (amount <= 0) {
                 return {
@@ -118,47 +120,49 @@ export class SVMChainWallet extends ChainWallet<PublicKey, Keypair, Connection> 
                 };
             }
 
-            if (slippage < 0 || slippage > 5000) {
-                return {
-                    success: false,
-                    hash: "",
-                    error: "Slippage must be between 0 and 5000 basis points (0-100%)"
-                };
+            // Smart slippage handling
+            // Expects slippage in BPS (basis points where 100 = 1%)
+            // Default: 150 BPS = 1.5%
+            // Range: 50-300 BPS = 0.5%-3%
+            let slippageBps: number;
+
+            if (slippage === undefined || slippage === null) {
+                // No slippage provided - use 1.5% default (good for most swaps)
+                slippageBps = 150;
+                console.log('No slippage provided, using default: 150 BPS (1.5%)');
+            } else {
+                // Clamp between 50 BPS (0.5%) and 300 BPS (3%)
+                // This prevents both too-tight and too-loose slippage
+                if (slippage < 50) {
+                    console.log(`Slippage ${slippage} BPS too low (< 0.5%), clamping to 50 BPS`);
+                    slippageBps = 50;
+                } else if (slippage > 300) {
+                    console.log(`Slippage ${slippage} BPS too high (> 3%), clamping to 300 BPS`);
+                    slippageBps = 300;
+                } else {
+                    slippageBps = slippage;
+                    console.log(`Using provided slippage: ${slippageBps} BPS (${slippageBps / 100}%)`);
+                }
             }
 
             const fromTokenMint = new PublicKey(fromToken.address);
             const toTokenMint = toToken;
-
-            // const validation = await validateJupiterTokens(
-            //     fromTokenMint.toString(),
-            //     toTokenMint.toString()
-            // );
-
-            // if (!validation.valid) {
-            //     return {
-            //         success: false,
-            //         hash: "",
-            //         error: validation.message || "Token validation failed"
-            //     };
-            // }
-
             const baseAmount = uiAmountToBaseUnits(amount, fromToken.decimals);
 
-            // const balance = await this.getTokenBalance(fromTokenMint);
-            // if (balance.balance.lt(new BN(baseAmount))) {
-            //     return {
-            //         success: false,
-            //         hash: "",
-            //         error: "Insufficient balance for swap"
-            //     };
-            // }
+            console.log('Swap details:', {
+                from: fromTokenMint.toString(),
+                to: toTokenMint.toString(),
+                amount: baseAmount,
+                slippageBps,
+                slippagePercent: `${slippageBps / 100}%`
+            });
 
             const swapResult = await executeJupiterSwap(
                 {
                     fromToken: fromTokenMint,
                     toToken: toTokenMint,
                     amount: baseAmount,
-                    slippageBps: slippage,
+                    slippageBps: slippageBps,
                     userPublicKey: this.address
                 },
                 this.connection!,
@@ -188,7 +192,12 @@ export class SVMChainWallet extends ChainWallet<PublicKey, Keypair, Connection> 
         }
     }
 
-    async getSwapQuote(fromToken: TokenInfo, toToken: PublicKey, amount: number, slippage: number = 100): Promise<{
+    async getSwapQuote(
+        fromToken: TokenInfo,
+        toToken: PublicKey,
+        amount: number,
+        slippage?: number
+    ): Promise<{
         success: boolean;
         inputAmount?: string;
         outputAmount?: string;
@@ -201,11 +210,23 @@ export class SVMChainWallet extends ChainWallet<PublicKey, Keypair, Connection> 
             const fromTokenMint = new PublicKey(fromToken.address);
             const baseAmount = uiAmountToBaseUnits(amount, fromToken.decimals);
 
+            // Use same smart slippage logic as swap()
+            let slippageBps: number;
+
+            if (slippage === undefined || slippage === null) {
+                slippageBps = 150; // 1.5% default
+            } else {
+                // Clamp between 50-300 BPS
+                slippageBps = Math.max(50, Math.min(300, slippage));
+            }
+
+            console.log('Getting quote with slippage:', slippageBps, 'BPS');
+
             const quote = await getJupiterQuote(
                 fromTokenMint.toString(),
                 toToken.toString(),
                 baseAmount,
-                slippage
+                slippageBps
             );
 
             return {
